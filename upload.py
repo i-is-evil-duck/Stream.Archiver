@@ -1,7 +1,7 @@
 import os
 import time
-import httplib2
 import json
+import httplib2
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from googleapiclient.discovery import build
@@ -15,27 +15,26 @@ CLIENT_SECRETS_FILE = "client_secrets.json"
 YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 YOUTUBE_API_SERVICE_NAME = "youtube"
 YOUTUBE_API_VERSION = "v3"
-UPLOAD_DIR = "C:\\Users\\Ducky\\Documents\\visualstudio\\api\\recordings"
-VIDEO_LINKS_FILE = "video_links.json"
+UPLOAD_DIR = "upload"
+LINKS_FILE = "video_links.json"
 
 # Ensure the upload directory exists
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
-# Load existing video links or create a new list
-if os.path.exists(VIDEO_LINKS_FILE):
-    with open(VIDEO_LINKS_FILE, 'r') as f:
-        video_links = json.load(f)
-else:
-    video_links = []
+# Ensure the links file exists with the correct initial structure
+if not os.path.exists(LINKS_FILE):
+    with open(LINKS_FILE, 'w') as f:
+        json.dump({"links": []}, f)
 
 class VideoUploadHandler(FileSystemEventHandler):
     def on_created(self, event):
         if event.is_directory:
             return
         file_path = event.src_path
-        if file_path.endswith(('.mp4', '.avi', '.mov', '.flv')):  # Modify for your video types
+        if file_path.endswith(('.mp4', '.avi', '.mkv', '.flv')):  # Modify for your video types
             print(f"New video detected: {file_path}")
+            time.sleep(5)  # Wait for 5 seconds before uploading
             upload_video(file_path)
 
 def get_authenticated_service():
@@ -71,23 +70,35 @@ def upload_video(file_path):
         )
         response = request.execute()
         video_id = response['id']
-        video_link = f"https://www.youtube.com/watch?v={video_id}"
-        print(f"Video uploaded: {video_link}")
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        print(f"Video uploaded: {video_url}")
 
-        # Delete the video file after successful upload
+        # Write the new video URL to the JSON file
+        write_video_link(video_url)
+
+        # Delay for 15 seconds before deleting the file
+        time.sleep(15)
+
+        # Delete the video file after the delay
         os.remove(file_path)
         print(f"Deleted recording: {file_path}")
-
-        # Save the video link to the JSON file
-        video_links.append({"id": video_id, "link": video_link})
-        with open(VIDEO_LINKS_FILE, 'w') as f:
-            json.dump(video_links, f, indent=4)
-        print(f"Saved video link: {video_link}")
 
     except HttpError as e:
         print(f"An error occurred: {e}")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
+
+def write_video_link(video_url):
+    # Read the existing links
+    with open(LINKS_FILE, 'r') as f:
+        data = json.load(f)
+
+    # Add the new video URL
+    data['links'].append(video_url)
+
+    # Write the updated links back to the file
+    with open(LINKS_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
 
 if __name__ == "__main__":
     event_handler = VideoUploadHandler()
