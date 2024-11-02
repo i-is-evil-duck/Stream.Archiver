@@ -1,6 +1,6 @@
 import os
 import time
-import httplib2  # Make sure this line is included
+import httplib2
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from googleapiclient.discovery import build
@@ -8,7 +8,7 @@ from googleapiclient.errors import HttpError
 from oauth2client.client import flow_from_clientsecrets
 from oauth2client.file import Storage
 from oauth2client.tools import argparser, run_flow
-from googleapiclient.http import MediaFileUpload  # Ensure you have this import
+from googleapiclient.http import MediaFileUpload
 
 CLIENT_SECRETS_FILE = "client_secrets.json"
 YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
@@ -62,8 +62,15 @@ def upload_video(file_path):
         )
         response = request.execute()
         print(f"Video uploaded: {response['id']}")
+
+        # Delete the video file after successful upload
+        os.remove(file_path)
+        print(f"Deleted recording: {file_path}")
+
     except HttpError as e:
         print(f"An error occurred: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
     event_handler = VideoUploadHandler()
