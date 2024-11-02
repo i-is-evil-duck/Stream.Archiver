@@ -1,52 +1,37 @@
-import cv2
 import os
-import time
+import subprocess
 from datetime import datetime
 
-# Specify the directory to save recordings
-RECORDINGS_DIR = "C:\\Users\\Ducky\\Documents\\visualstudio\\api\\recordings"
+# Ensure the output directory exists
+output_folder = 'rec'
+if not os.path.exists(output_folder):
+    os.makedirs(output_folder)
 
-# Create the directory if it doesn't exist
-if not os.path.exists(RECORDINGS_DIR):
-    os.makedirs(RECORDINGS_DIR)
+# Get the current date and time to use in the filename
+curr_datetime = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-# Variable to control the recording length (in seconds)
-RECORDING_LENGTH = 60  # Change this to set desired recording length
+# Set the duration of the video clip (in seconds)
+clip_duration = 60  # 1 minute
 
-def record_clip(duration):
-    # Open a connection to the webcam (default camera index is 0)
-    cap = cv2.VideoCapture(0)
+# OBS Virtual Camera input using DirectShow
+camera_name = "OBS Virtual Camera"
 
-    # Get the frame width and height
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+# FFMPEG command
+command = [
+    "ffmpeg",
+    "-hide_banner",
+    "-y",
+    "-f",
+    "dshow",
+    "-t",
+    str(clip_duration),  # duration of the recording in seconds
+    "-i",
+    f"video={camera_name}",  # input video device
+    os.path.join(output_folder, f"{curr_datetime}.mkv")  # output file
+]
 
-    # Define the codec and create VideoWriter object
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    timestamp = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
-    output_file = os.path.join(RECORDINGS_DIR, f"{timestamp}.avi")
-    out = cv2.VideoWriter(output_file, fourcc, 20.0, (frame_width, frame_height))
+# Print the command for debugging purposes
+print("Running command:", " ".join(command))
 
-    print(f"Recording for {duration} seconds...")
-
-    start_time = time.time()
-    while int(time.time() - start_time) < duration:
-        ret, frame = cap.read()
-        if ret:
-            out.write(frame)
-            cv2.imshow('Recording', frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to stop early
-                break
-        else:
-            print("Failed to grab frame.")
-            break
-
-    # Release everything when done
-    cap.release()
-    out.release()
-    cv2.destroyAllWindows()
-    print(f"Recording saved to {output_file}")
-
-if __name__ == "__main__":
-    while True:  # Loop to keep recording continuously
-        record_clip(RECORDING_LENGTH)
+# Run the command
+subprocess.run(command)
