@@ -1,6 +1,7 @@
 import os
 import time
 import httplib2
+import json
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from googleapiclient.discovery import build
@@ -15,10 +16,18 @@ YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 YOUTUBE_API_SERVICE_NAME = "youtube"
 YOUTUBE_API_VERSION = "v3"
 UPLOAD_DIR = "C:\\Users\\Ducky\\Documents\\visualstudio\\api\\recordings"
+VIDEO_LINKS_FILE = "video_links.json"
 
 # Ensure the upload directory exists
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
+
+# Load existing video links or create a new list
+if os.path.exists(VIDEO_LINKS_FILE):
+    with open(VIDEO_LINKS_FILE, 'r') as f:
+        video_links = json.load(f)
+else:
+    video_links = []
 
 class VideoUploadHandler(FileSystemEventHandler):
     def on_created(self, event):
@@ -61,11 +70,19 @@ def upload_video(file_path):
             media_body=MediaFileUpload(file_path, chunksize=-1, resumable=True)
         )
         response = request.execute()
-        print(f"Video uploaded: {response['id']}")
+        video_id = response['id']
+        video_link = f"https://www.youtube.com/watch?v={video_id}"
+        print(f"Video uploaded: {video_link}")
 
         # Delete the video file after successful upload
         os.remove(file_path)
         print(f"Deleted recording: {file_path}")
+
+        # Save the video link to the JSON file
+        video_links.append({"id": video_id, "link": video_link})
+        with open(VIDEO_LINKS_FILE, 'w') as f:
+            json.dump(video_links, f, indent=4)
+        print(f"Saved video link: {video_link}")
 
     except HttpError as e:
         print(f"An error occurred: {e}")
