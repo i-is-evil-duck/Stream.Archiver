@@ -1,3 +1,4 @@
+# upload.py
 import os
 import time
 import json
@@ -8,7 +9,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from oauth2client.client import flow_from_clientsecrets
 from oauth2client.file import Storage
-from oauth2client.tools import argparser, run_flow
+from oauth2client.tools import run_flow
 from googleapiclient.http import MediaFileUpload
 
 CLIENT_SECRETS_FILE = "client_secrets.json"
@@ -76,10 +77,7 @@ def upload_video(file_path):
         # Write the new video URL to the JSON file
         write_video_link(video_url)
 
-        # Delay for 15 seconds before deleting the file
-        time.sleep(15)
-
-        # Delete the video file after the delay
+        # Delete the video file after successful upload
         os.remove(file_path)
         print(f"Deleted recording: {file_path}")
 
@@ -100,7 +98,7 @@ def write_video_link(video_url):
     with open(LINKS_FILE, 'w') as f:
         json.dump(data, f, indent=4)
 
-if __name__ == "__main__":
+def start_upload_monitor():
     event_handler = VideoUploadHandler()
     observer = Observer()
     observer.schedule(event_handler, UPLOAD_DIR, recursive=False)
@@ -113,3 +111,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         observer.stop()
     observer.join()
+
+# Only run the monitor if the script is executed directly
+if __name__ == "__main__":
+    start_upload_monitor()
