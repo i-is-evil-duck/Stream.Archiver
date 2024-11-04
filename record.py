@@ -13,7 +13,7 @@ if not os.path.exists(rec_folder):
 if not os.path.exists(recordings_folder):
     os.makedirs(recordings_folder)
 
-clip_duration = 30  # Duration of the video clip in seconds
+clip_duration = 12 * 60 * 60  # Duration of the video clip in seconds
 camera_name = "OBS Virtual Camera"
 
 def start_recording():
