@@ -1,7 +1,7 @@
 # main.py
 import threading
 import upload
-import record
+# import record
 import console
 import clear
 
@@ -12,7 +12,7 @@ def start_clear_task():
 def main():
     # Create and start each service thread
     upload_thread = threading.Thread(target=upload.start_upload_monitor)
-    record_thread = threading.Thread(target=record.start_recording)
+    # record_thread = threading.Thread(target=record.start_recording)
     console_thread = threading.Thread(target=console.start_console)
     clear_thread = threading.Thread(target=start_clear_task)  # Thread for clear scheduler
 
@@ -21,7 +21,7 @@ def main():
 
     # Start all threads
     upload_thread.start()
-    record_thread.start()
+    # record_thread.start()
     console_thread.start()
     clear_thread.start()
 
@@ -29,7 +29,7 @@ def main():
 
     # Join threads to wait for completion
     upload_thread.join()
-    record_thread.join()
+    # record_thread.join()
     console_thread.join()
     # Note: clear_thread does not need join as it runs continuously in the background
 
