@@ -5,10 +5,11 @@ import time
 from datetime import datetime
 
 # Define source and destination directories
-source_dir = r'C:\path\to\videos'
+source_dir = r'C:\path\to\videos'  # Update this path to the actual location
 destination_dir = r'C:\api\upload'
 
 def move_files():
+    """Moves all .mkv files from source_dir to destination_dir."""
     print(f"{datetime.now()}: Moving files...")
     try:
         for filename in os.listdir(source_dir):
@@ -21,6 +22,7 @@ def move_files():
         print(f"Error moving files: {e}")
 
 def delete_files():
+    """Deletes all files in destination_dir that are not in use."""
     print(f"{datetime.now()}: Deleting files...")
     for filename in os.listdir(destination_dir):
         file_path = os.path.join(destination_dir, filename)
@@ -32,13 +34,16 @@ def delete_files():
         except Exception as e:
             print(f"Error deleting {filename}: {e}")
 
-def start_clear_scheduler():
-    schedule.every().day.at("11:00").do(move_files)
-    schedule.every().day.at("11:30").do(delete_files)
-    print("Clear scheduler tasks started. Waiting for scheduled times...")
-    while True:
-        try:
-            schedule.run_pending()
-            time.sleep(1)
-        except Exception as e:
-            print(f"Error in clear scheduler: {e}")
+# Schedule the tasks
+schedule.every().day.at("11:00").do(move_files)
+schedule.every().day.at("11:30").do(delete_files)
+
+print("Scheduled tasks started. Waiting for the scheduled times...")
+
+# Keep the script running to check schedule
+while True:
+    try:
+        schedule.run_pending()
+    except Exception as e:
+        print(f"Error during scheduled task: {e}")
+    time.sleep(1)
