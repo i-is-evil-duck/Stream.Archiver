@@ -1,128 +1,150 @@
 import os
 import time
-import json
-import ssl
 import httplib2
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+import http.client as httplib  # Python 3 uses http.client
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from oauth2client.client import flow_from_clientsecrets
-from oauth2client.file import Storage
-from oauth2client.tools import run_flow
 from googleapiclient.http import MediaFileUpload
+from oauth2client.file import Storage
+from oauth2client.tools import argparser, run_flow
+from oauth2client.client import flow_from_clientsecrets
 
-# Disable SSL certificate verification globally
-try:
-    _create_unverified_https_context = ssl._create_unverified_context
-except AttributeError:
-    pass  # Older Python versions don't verify HTTPS certificates by default
-else:
-    ssl._create_default_https_context = _create_unverified_https_context
+# Disable SSL verification (INSECURE)
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
+# Directory to monitor
+UPLOAD_DIR = r"C:\api\upload"
 CLIENT_SECRETS_FILE = "client_secrets.json"
-YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
+
+YOUTUBE_UPLOAD_SCOPE = "http://www.googleapis.com/auth/youtube.upload"
 YOUTUBE_API_SERVICE_NAME = "youtube"
 YOUTUBE_API_VERSION = "v3"
-UPLOAD_DIR = "upload"
-LINKS_FILE = "video_links.json"
+VALID_PRIVACY_STATUSES = ("public", "private", "unlisted")
 
-# Ensure the upload directory exists
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
+MISSING_CLIENT_SECRETS_MESSAGE = f"""
+WARNING: Please configure OAuth 2.0.
 
-# Ensure the links file exists with the correct initial structure
-if not os.path.exists(LINKS_FILE):
-    with open(LINKS_FILE, 'w') as f:
-        json.dump({"links": []}, f)
+To make this script run, you need to populate the client_secrets.json file found at:
+{os.path.abspath(CLIENT_SECRETS_FILE)}
 
-class VideoUploadHandler(FileSystemEventHandler):
-    def on_created(self, event):
-        if event.is_directory:
-            return
-        file_path = event.src_path
-        if file_path.endswith(('.mp4', '.avi', '.mkv', '.flv')):  # Modify for your video types
-            print(f"New video detected: {file_path}")
-            time.sleep(5)  # Wait for 5 seconds before uploading
-            upload_video(file_path)
+Visit http://console.cloud.google.com/ to configure the project.
+"""
 
 def get_authenticated_service():
-    flow = flow_from_clientsecrets(CLIENT_SECRETS_FILE, scope=YOUTUBE_UPLOAD_SCOPE)
-    storage = Storage("youtube-oauth2.json")
+    flow = flow_from_clientsecrets(
+        CLIENT_SECRETS_FILE,
+        scope=YOUTUBE_UPLOAD_SCOPE,
+        message=MISSING_CLIENT_SECRETS_MESSAGE
+    )
+    storage = Storage("oauth2.json")
     credentials = storage.get()
-    if credentials is None or credentials.invalid:
+
+    if not credentials or credentials.invalid:
         credentials = run_flow(flow, storage)
-    # Disable SSL verification for httplib2.Http
-    return build(
-        YOUTUBE_API_SERVICE_NAME,
-        YOUTUBE_API_VERSION,
-        http=credentials.authorize(httplib2.Http(disable_ssl_certificate_validation=True))
+
+    # Create an HTTP client with SSL verification disabled
+    http = httplib2.Http(disable_ssl_certificate_validation=True)
+    authorized_http = credentials.authorize(http)
+
+    return build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, http=authorized_http)
+
+
+def upload_video(youtube, file_path):
+    title = os.path.basename(file_path)
+    description = f"Uploaded automatically by script. Filename: {title}"
+    tags = ["automation", "upload"]
+    category = "22"  # People & Blogs
+
+    body = dict(
+        snippet=dict(
+            title=title,
+            description=description,
+            tags=tags,
+            categoryId=category
+        ),
+        status=dict(
+            privacyStatus="private"
+        )
     )
 
-def upload_video(file_path):
-    youtube = get_authenticated_service()
-    title = os.path.basename(file_path).rsplit('.', 1)[0]  # Remove file extension for title
-    description = "Stream clip"
-    
-    body = {
-        'snippet': {
-            'title': title,
-            'description': description,
-            'tags': ['example', 'tag'],  # Example tags
-            'categoryId': '22'  # Category ID for People & Blogs
-        },
-        'status': {
-            'privacyStatus': 'private'  # Change as needed
-        }
-    }
+    print(f"Uploading file: {file_path}")
+    media = MediaFileUpload(file_path, chunksize=-1, resumable=True)
+    request = youtube.videos().insert(part=",".join(body.keys()), body=body, media_body=media)
+    resumable_upload(request)
 
-    try:
-        request = youtube.videos().insert(
-            part="snippet,status",
-            body=body,
-            media_body=MediaFileUpload(file_path, chunksize=-1, resumable=True)
-        )
-        response = request.execute()
-        video_id = response['id']
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
-        print(f"Video uploaded: {video_url}")
+def resumable_upload(insert_request):
+    response = None
+    error = None
+    retry = 0
+    start_time = time.time()
+    last_update_time = start_time
 
-        # Write the new video URL to the JSON file
-        write_video_link(video_url)
+    while response is None:
+        try:
+            print("Uploading...")
 
+            # Log before sending the request
+            print("Sending next chunk...")
+            status, response = insert_request.next_chunk()
+            
+            # Log if we receive a status update
+            if status:
+                print(f"Uploaded {int(status.progress() * 100)}%...")
+                print(f"Request sent, awaiting response...")
 
+            # Log if the upload is complete
+            if response:
+                print("Response received.")
+                if "id" in response:
+                    print(f"Video ID '{response['id']}' uploaded successfully.")
+                else:
+                    print(f"Unexpected response: {response}")
 
-    except HttpError as e:
-        print(f"An error occurred: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        except HttpError as e:
+            # Log HTTP errors
+            if e.resp.status in [500, 502, 503, 504]:
+                error = f"Retriable HTTP error {e.resp.status}:\n{e.content}"
+            else:
+                raise
+        except (httplib.HTTPException, IOError) as e:
+            # Log retriable errors
+            error = f"Retriable error occurred: {str(e)}"
+        except Exception as e:
+            # Catch any other unexpected issues
+            print(f"An unexpected error occurred: {str(e)}")
+            break
 
-def write_video_link(video_url):
-    # Read the existing links
-    with open(LINKS_FILE, 'r') as f:
-        data = json.load(f)
+        if error:
+            print(error)
+            retry += 1
+            if retry > 10:
+                print("Max retries reached. Exiting.")
+                return
+            sleep_time = 2 ** retry
+            print(f"Sleeping {sleep_time} seconds before retrying...")
+            time.sleep(sleep_time)
 
-    # Add the new video URL
-    data['links'].append(video_url)
+    print(f"Upload completed in {time.time() - start_time:.2f} seconds.")
 
-    # Write the updated links back to the file
-    with open(LINKS_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+def monitor_directory(youtube):
+    uploaded_files = set()
+    while True:
+        files = [f for f in os.listdir(UPLOAD_DIR) if f.endswith(".mkv")]
+        new_files = [f for f in files if f not in uploaded_files]
 
-def start_upload_monitor():
-    event_handler = VideoUploadHandler()
-    observer = Observer()
-    observer.schedule(event_handler, UPLOAD_DIR, recursive=False)
-    observer.start()
-    print("Monitoring for new videos...")
+        for file_name in new_files:
+            file_path = os.path.join(UPLOAD_DIR, file_name)
+            try:
+                upload_video(youtube, file_path)
+                uploaded_files.add(file_name)
+                os.remove(file_path)  # Delete after upload
+            except Exception as e:
+                print(f"Error uploading {file_name}: {e}")
 
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+        time.sleep(10)  # Poll every 10 seconds
 
-# Only run the monitor if the script is executed directly
 if __name__ == "__main__":
-    start_upload_monitor()
+    youtube_service = get_authenticated_service()
+    print(f"Monitoring directory: {UPLOAD_DIR}")
+    monitor_directory(youtube_service)
