@@ -5,8 +5,7 @@
 ### A lil program that captures 12 hour clips and auto uploads to youtube
 
 Made for our VEX field stream since youtube dvr only captures the last 24hrs <br />
-Uses the OBS advanced scene swicher for automated recording start/stoping <br />
-chat is rly good at crappy programs like this :3 <br />
+Uses the [OBS advanced scene swicher](https://github.com/WarmUpTill/SceneSwitcher) for automated recording start/stoping <br />
 
 
 ## Views
